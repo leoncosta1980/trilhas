@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1b5e20"><link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg">
+<title>Trilhas GPS</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,sans-serif;overflow:hidden}
+#map{position:absolute;inset:0 0 150px 0}
+#bar{position:absolute;left:0;right:0;bottom:0;height:150px;background:#fff;padding:8px 10px calc(8px + env(safe-area-inset-bottom));z-index:1000;box-shadow:0 -2px 8px #0004}
+.st{display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:4px}.st b{display:block;font-size:18px}.st span{font-size:11px;color:#666}
+.btns{display:flex;gap:8px;margin-top:8px}
+button{border:0;border-radius:10px;padding:12px;font-size:15px;background:#e8f5e9;color:#1b5e20;flex:1}
+button.p{background:#2e7d32;color:#fff}button.r{background:#c62828;color:#fff}
+.fab{position:absolute;right:10px;z-index:1000;width:44px;height:44px;border-radius:50%;flex:none;padding:0;background:#fff;box-shadow:0 1px 5px #0006;font-size:20px}
+#dr{position:absolute;inset:0 0 150px 0;z-index:1100;background:#fff;transform:translateY(105%);transition:.25s;overflow:auto;padding:10px;padding-top:calc(10px + env(safe-area-inset-top))}#dr.o{transform:none}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{padding:10px 4px;font-size:14px}
+.it{border-bottom:1px solid #ddd;padding:8px 0}.it small{display:block;color:#666;margin:2px 0 6px}.it div{display:flex;gap:6px}.it button{padding:8px;font-size:13px}
+.imp{display:block;text-align:center;padding:10px;background:#e8f5e9;border-radius:10px;margin-bottom:8px;color:#1b5e20}
+#pfw{position:absolute;left:0;right:0;bottom:150px;height:100px;background:#fffd;z-index:1000;display:none}#pfw canvas{width:100%;height:100%}
+#pfw span{position:absolute;left:6px;top:2px;font-size:11px;color:#333}#pfw b{position:absolute;right:8px;top:0;font-size:20px}
+.wp{font-size:24px;line-height:24px}
+</style></head><body>
+<div id="map"></div>
+<button class="fab" style="top:64px" id="loc">📍</button>
+<button class="fab" style="top:116px" id="menu">☰</button>
+<button class="fab" style="top:168px" id="wpb">🚩</button>
+<div id="pfw"><span id="pfi"></span><b onclick="this.parentNode.style.display='none'">×</b><canvas id="pf"></canvas></div>
+<div id="dr"></div>
+<div id="bar"><div class="st"><div><b id="sD">0 m</b><span>Distância</span></div><div><b id="sT">0:00</b><span>Tempo</span></div><div><b id="sV">0.0</b><span>km/h médio</span></div><div><b id="sA">–</b><span>Altitude</span></div></div>
+<div class="st" style="margin-top:6px"><div><b id="sU">0 m</b><span>Subida ↑</span></div><div><b id="sN">0 m</b><span>Descida ↓</span></div><div><b id="sC">–</b><span>km/h atual</span></div><div><b id="sP">–</b><span>Precisão</span></div></div>
+<div class="btns"><button id="rec" class="p">● Gravar trilha</button><button id="pause" style="display:none">⏸ Pausar</button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const $=s=>document.querySelector(s),R=Math.PI/180,esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const S={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return 1}catch{alert('Armazenamento cheio: exporte (GPX) e apague trilhas antigas.')}}};
+const hav=(a,b)=>{const x=Math.sin((b[0]-a[0])*R/2)**2+Math.cos(a[0]*R)*Math.cos(b[0]*R)*Math.sin((b[1]-a[1])*R/2)**2;return 12742000*Math.asin(Math.sqrt(x))};
+function stats(p){let d=0,up=0,dn=0,mv=0,ref=null;for(let i=1;i<p.length;i++){const s=hav(p[i-1],p[i]),dt=(p[i][3]-p[i-1][3])/1000;d+=s;if(dt>0&&s/dt>.3)mv+=dt}
+for(const q of p){if(q[2]==null)continue;if(ref==null){ref=q[2];continue}const f=q[2]-ref;if(f>=4){up+=f;ref=q[2]}else if(f<=-4){dn-=f;ref=q[2]}}
+return{d,up,dn,mv,el:p.length>1?(p.at(-1)[3]-p[0][3])/1000:0}}
+const fd=m=>m>=1000?(m/1000).toFixed(2)+' km':Math.round(m)+' m';
+const ft=s=>{s=Math.round(s);const h=s/3600|0;return(h?h+':':'')+String((s%3600)/60|0).padStart(h?2:1,'0')+':'+String(s%60).padStart(2,'0')};
+const map=L.map('map',{zoomControl:false}).setView([-14.79,-39.28],13);
+const base={'Ruas (OSM)':L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}),
+'Topográfico':L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,subdomains:'abc',attribution:'© OpenTopoMap'}),
+'Satélite':L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri'})};
+let cur=base['Ruas (OSM)'].addTo(map);L.control.layers(base,null,{position:'topright'}).addTo(map);L.control.scale({imperial:false}).addTo(map);
+map.on('baselayerchange',e=>cur=e.layer);
+const live=L.polyline([],{color:'#e53935',weight:5}).addTo(map),shown=L.layerGroup().addTo(map),wl=L.layerGroup().addTo(map);
+let me,acc,watch=null,follow=false,last=null,rec=S.get('rec',null),paused=false,wake=null,spd=null;
+function ensureWatch(){if(watch!=null)return;if(!navigator.geolocation)return alert('GPS indisponível');watch=navigator.geolocation.watchPosition(onPos,e=>alert('GPS: '+e.message),{enableHighAccuracy:true,maximumAge:0,timeout:30000})}
+function maybeStop(){if(!rec&&!follow&&watch!=null){navigator.geolocation.clearWatch(watch);watch=null}}
+function onPos(p){const c=p.coords,ll=[c.latitude,c.longitude];last=ll;spd=c.speed;
+if(!me){me=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1}).addTo(map);acc=L.circle(ll,{radius:c.accuracy,weight:1,opacity:.3}).addTo(map)}else{me.setLatLng(ll);acc.setLatLng(ll).setRadius(c.accuracy)}
+if(follow)map.setView(ll,Math.max(map.getZoom(),16));
+if(rec&&!paused&&c.accuracy<=30){const q=rec.pts.at(-1);if(!q||hav(q,ll)>=5){rec.pts.push([ll[0],ll[1],c.altitude,p.timestamp]);live.addLatLng(ll);if(rec.pts.length%5==0)S.set('rec',rec)}}
+upd(c)}
+function upd(c){const s=stats(rec?rec.pts:[]);$('#sD').textContent=fd(s.d);$('#sT').textContent=ft(s.el);$('#sV').textContent=s.mv>0?(s.d/s.mv*3.6).toFixed(1):'0.0';
+$('#sU').textContent=Math.round(s.up)+' m';$('#sN').textContent=Math.round(s.dn)+' m';
+if(c){$('#sA').textContent=c.altitude!=null?Math.round(c.altitude)+' m':'–';$('#sP').textContent='±'+Math.round(c.accuracy)+' m';$('#sC').textContent=spd!=null?(spd*3.6).toFixed(1):'–'}}
+async function lock(){try{wake=await navigator.wakeLock.request('screen')}catch{}}
+document.addEventListener('visibilitychange',()=>{if(rec&&document.visibilityState=='visible')lock()});
+setInterval(()=>rec&&upd(),1000);
+function ui(){$('#rec').textContent=rec?'■ Parar e salvar':'● Gravar trilha';$('#rec').className=rec?'r':'p';$('#pause').style.display=rec?'':'none';$('#pause').textContent=paused?'▶ Retomar':'⏸ Pausar'}
+$('#rec').onclick=()=>{if(!rec){rec={id:Date.now(),pts:[]};paused=false;live.setLatLngs([]);S.set('rec',rec);ensureWatch();lock()}
+else{const r=rec;rec=null;S.set('rec',null);wake&&wake.release();live.setLatLngs([]);
+if(r.pts.length<2){alert('Poucos pontos gravados; trilha descartada.')}else{const n=prompt('Nome da trilha:','Trilha '+new Date(r.id).toLocaleString());if(n!==null){const T=S.get('tracks',[]);T.unshift({id:r.id,name:n||'Trilha',pts:r.pts});S.set('tracks',T);view(r.id)}}
+maybeStop()}ui()};
+$('#pause').onclick=()=>{paused=!paused;ui()};
+$('#loc').onclick=()=>{follow=!follow;$('#loc').style.background=follow?'#bbdefb':'#fff';if(follow){ensureWatch();if(last)map.setView(last,16)}else maybeStop()};
+let W=S.get('w',[]);
+function drawW(){wl.clearLayers();W.forEach(w=>L.marker([w.lat,w.lon],{icon:L.divIcon({html:'🚩',className:'wp',iconSize:[24,24],iconAnchor:[6,24]})}).bindPopup(`<b>${esc(w.name)}</b><br>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}<br><a href="#" onclick="delW(${w.id});return false">Apagar</a>`).addTo(wl))}
+function addW(ll){const n=prompt('Nome do ponto:','Ponto '+(W.length+1));if(n===null)return;W.push({id:Date.now(),name:n,lat:ll[0],lon:ll[1]});S.set('w',W);drawW()}
+function delW(id){W=W.filter(w=>w.id!=id);S.set('w',W);drawW();map.closePopup();render()}
+$('#wpb').onclick=()=>{const c=map.getCenter();addW(last||[c.lat,c.lng])};
+map.on('contextmenu',e=>addW([e.latlng.lat,e.latlng.lng]));
+function view(id){const t=S.get('tracks',[]).find(t=>t.id==id);if(!t)return;shown.clearLayers();const l=L.polyline(t.pts.map(p=>[p[0],p[1]]),{color:'#1565c0',weight:5}).addTo(shown);map.fitBounds(l.getBounds(),{padding:[30,30]});$('#dr').classList.remove('o');profile(t)}
+function profile(t){const p=t.pts.filter(q=>q[2]!=null);const w=$('#pfw');if(p.length<2){w.style.display='none';return}w.style.display='block';const c=$('#pf');c.width=c.clientWidth*2;c.height=c.clientHeight*2;const g=c.getContext('2d');
+let x=0;const X=[0];for(let i=1;i<p.length;i++){x+=hav(p[i-1],p[i]);X.push(x)}const lo=Math.min(...p.map(q=>q[2])),hi=Math.max(...p.map(q=>q[2])),H=c.height-30,sc=H/Math.max(hi-lo,10);
+g.fillStyle='#66bb6a88';g.strokeStyle='#2e7d32';g.lineWidth=3;g.beginPath();g.moveTo(0,c.height);p.forEach((q,i)=>g.lineTo(X[i]/x*c.width,c.height-4-(q[2]-lo)*sc));g.lineTo(c.width,c.height);g.closePath();g.fill();g.stroke();
+$('#pfi').textContent=`${t.name} · ${Math.round(lo)}–${Math.round(hi)} m · ${fd(x)}`}
+function gpx(t){return`<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Trilhas" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${esc(t.name)}</name><trkseg>${t.pts.map(p=>`<trkpt lat="${p[0]}" lon="${p[1]}">${p[2]!=null?`<ele>${p[2].toFixed(1)}</ele>`:''}<time>${new Date(p[3]).toISOString()}</time></trkpt>`).join('')}</trkseg></trk></gpx>`}
+function exp(id){const t=S.get('tracks',[]).find(t=>t.id==id),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([gpx(t)],{type:'application/gpx+xml'}));a.download=t.name.replace(/[^\w-]+/g,'_')+'.gpx';a.click()}
+function delT(id){if(!confirm('Apagar esta trilha?'))return;S.set('tracks',S.get('tracks',[]).filter(t=>t.id!=id));shown.clearLayers();render()}
+async function imp(f){if(!f)return;const d=new DOMParser().parseFromString(await f.text(),'text/xml'),T=S.get('tracks',[]);
+const pts=[...d.querySelectorAll('trkpt')].map((e,i)=>{const el=e.querySelector('ele'),tm=e.querySelector('time');return[+e.getAttribute('lat'),+e.getAttribute('lon'),el?+el.textContent:null,tm?Date.parse(tm.textContent):Date.now()+i*1000]});
+if(pts.length>1){T.unshift({id:Date.now(),name:(d.querySelector('trk>name')||{}).textContent||f.name,pts});S.set('tracks',T)}
+d.querySelectorAll('wpt').forEach(e=>{const n=e.querySelector('name');W.push({id:Date.now()+Math.random(),name:n?n.textContent:'Ponto',lat:+e.getAttribute('lat'),lon:+e.getAttribute('lon')})});S.set('w',W);drawW();render()}
+function tiles(b,z0,z1){const o=[];for(let z=z0;z<=z1;z++){const n=2**z,X=l=>Math.floor((l+180)/360*n),Y=a=>Math.floor((1-Math.log(Math.tan(a*R)+1/Math.cos(a*R))/Math.PI)/2*n);for(let x=X(b.getWest());x<=X(b.getEast());x++)for(let y=Y(b.getNorth());y<=Y(b.getSouth());y++)o.push([x,y,z])}return o}
+const turl=t=>cur._url.replace('{s}','a').replace('{x}',t[0]).replace('{y}',t[1]).replace('{z}',t[2]);
+const zr=()=>{const z0=map.getZoom(),z1=Math.min(+($('#zm')||{value:z0+3}).value||z0+3,cur.options.maxZoom);return[z0,Math.max(z0,z1)]};
+async function dl(){if(!navigator.serviceWorker.controller)return alert('Recarregue o app uma vez para ativar o modo offline.');const[z0,z1]=zr(),L=tiles(map.getBounds(),z0,z1);
+if(L.length>3000)return alert(L.length+' tiles: área grande demais. Aproxime o mapa ou reduza o zoom máximo (limite 3000).');if(!confirm(`Baixar ${L.length} tiles (~${Math.round(L.length*.02)} MB) da camada atual?`))return;
+let n=0;const st=$('#dls');for(let i=0;i<L.length;i+=6){await Promise.all(L.slice(i,i+6).map(t=>fetch(turl(t),{mode:'no-cors'}).catch(()=>{})));n=Math.min(i+6,L.length);st.textContent=`Baixando ${n}/${L.length}`}st.textContent='Concluído: '+L.length+' tiles salvos.'}
+async function clr(){if(confirm('Apagar todos os mapas offline?')){await caches.delete('tiles');alert('Mapas offline apagados.')}}
+let tab='t';
+function render(){const T=S.get('tracks',[]);let h=`<div class=tabs>${[['t','Trilhas'],['w','Pontos'],['o','Offline']].map(([k,n])=>`<button class="${tab==k?'p':''}" onclick="tab='${k}';render()">${n}</button>`).join('')}<button onclick="$('#dr').classList.remove('o')" style="flex:.4">✕</button></div>`;
+if(tab=='t')h+=`<label class=imp>⬆ Importar GPX<input type=file accept=".gpx,.xml" hidden onchange="imp(this.files[0])"></label>`+(T.length?T.map(t=>{const s=stats(t.pts);return`<div class=it><b>${esc(t.name)}</b><small>${new Date(t.id).toLocaleDateString()} · ${fd(s.d)} · ↑${Math.round(s.up)} m ↓${Math.round(s.dn)} m · ${ft(s.el)}</small><div><button onclick="view(${t.id})">Ver</button><button onclick="exp(${t.id})">GPX</button><button onclick="delT(${t.id})">Apagar</button></div></div>`}).join(''):'<p>Nenhuma trilha gravada ainda.</p>');
+if(tab=='w')h+=(W.length?W.map(w=>`<div class=it><b>${esc(w.name)}</b><small>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}</small><div><button onclick="map.setView([${w.lat},${w.lon}],17);$('#dr').classList.remove('o')">Ir</button><button onclick="delW(${w.id})">Apagar</button></div></div>`).join(''):'<p>Use 🚩 para marcar sua posição, ou segure o dedo no mapa para marcar um ponto.</p>');
+if(tab=='o'){const[z0,z1]=zr(),n=tiles(map.getBounds(),z0,z1).length;h+=`<p>Salva a área visível da <b>camada atual</b> para uso sem internet. Aproxime o mapa da região da trilha antes de baixar.</p><label>Zoom máximo: <select id=zm onchange="render()">${[14,15,16,17,18].map(z=>`<option ${z==z1?'selected':''}>${z}</option>`).join('')}</select></label><p>Estimativa: ${n} tiles (zoom ${z0}–${z1}).</p><button class=p onclick="dl()" style="width:100%">⬇ Baixar área visível</button><p id=dls></p><button onclick="clr()" style="width:100%">Apagar mapas offline</button>`}
+$('#dr').innerHTML=h}
+$('#menu').onclick=()=>{render();$('#dr').classList.toggle('o')};
+drawW();if(rec){live.setLatLngs(rec.pts.map(p=>[p[0],p[1]]));ensureWatch();lock();upd()}ui();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
