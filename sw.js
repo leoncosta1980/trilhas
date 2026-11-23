@@ -1,5 +1,5 @@
-/* Trilhas GPS - service worker v3.1 */
-const V='trilhas-v3.1',TC='tiles-v3';
+/* Trilhas GPS - service worker v3.2 */
+const V='trilhas-v3.2',TC='tiles-v3';
 const SHELL=['./','index.html','manifest.json','icon-192.png','icon-512.png','icon-maskable.png','apple-touch-icon.png'];
 const TILE=/(^|\.)(tile\.openstreetmap\.org|opentopomap\.org|arcgisonline\.com)$/;
 const tKey=u=>u.replace(/^https:\/\/[abc]\.tile\./,'https://a.tile.');

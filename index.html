@@ -797,6 +797,16 @@ button{cursor:pointer}
 .about-hd{text-align:center;padding:6px 0 4px}.about-hd img{border-radius:24px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:block;margin:0 auto 10px}
 .lst{margin:8px 0 12px;padding-left:20px;font-size:14.5px}.lst li{margin:6px 0}
 .ihd{display:flex;gap:14px;align-items:center;margin:6px 0 10px}.ihd img{border-radius:16px;flex:none}
+.fab.cam{background:#ef6c00;color:#fff}
+.phm{width:42px;height:42px;border-radius:50%;border:3px solid #fff;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.45);background:#333}.phm img{width:100%;height:100%;object-fit:cover;display:block}
+.pstrip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}.pstrip button{flex:none;width:80px;height:80px;border:0;padding:0;border-radius:12px;overflow:hidden;background:var(--line)}.pstrip img{width:100%;height:100%;object-fit:cover;display:block}
+#viewer{position:fixed;inset:0;z-index:5000;background:#000;display:flex;align-items:center;justify-content:center;touch-action:pan-y;user-select:none}
+#vImg{max-width:100%;max-height:100%;object-fit:contain}
+.vtop{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + 10px) 12px 16px;color:#fff;background:linear-gradient(rgba(0,0,0,.65),transparent)}
+.vbot{position:absolute;left:0;right:0;bottom:0;padding:30px 14px calc(env(safe-area-inset-bottom) + 12px);color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.85) 28%);font-size:14px;line-height:1.45}
+.vacts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}.vacts button{background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:12px;padding:9px 2px;font-size:11.5px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.vnav{position:absolute;top:45%;transform:translateY(-50%);width:44px;height:64px;border:0;background:rgba(0,0,0,.35);color:#fff;font-size:34px;border-radius:12px}.vnav.l{left:8px}.vnav.r{right:8px}
+#viewer.clean .vtop,#viewer.clean .vbot,#viewer.clean .vnav{display:none}
 .empty{text-align:center;color:var(--mut);padding:34px 16px}
 .empty svg{color:var(--g);opacity:.6;margin-bottom:8px}
 .bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--gbtn)}
@@ -839,6 +849,7 @@ summary{font-weight:600;cursor:pointer}details p{color:var(--mut);font-size:14.5
     <button id="compass" data-a="compass" aria-label="Bússola"><svg id="needle" viewBox="0 0 44 44"><path d="M22 4 28 22H16z" fill="#ef4436"/><path d="M22 40 16 22h12z" fill="#fff"/><circle cx="22" cy="22" r="2.4" fill="#151815"/></svg></button>
     <div id="banner" class="hidden"></div>
     <div id="fabs">
+      <button class="fab cam hidden" data-a="photo" aria-label="Tirar foto da trilha" id="fCam"></button>
       <button class="fab" data-a="search" aria-label="Buscar" id="fSearch"></button>
       <button class="fab" data-a="layers" aria-label="Camadas" id="fLayers"></button>
       <button class="fab" data-a="follow" aria-label="Centralizar na minha posição" id="fFollow"></button>
@@ -860,6 +871,10 @@ summary{font-weight:600;cursor:pointer}details p{color:var(--mut);font-size:14.5
 <input type="file" id="fileIn" multiple hidden>
 <input type="file" id="photoIn" accept="image/*" hidden>
 <input type="file" id="restoreIn" hidden>
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<div id="viewer" class="hidden"><img id="vImg" alt="" data-a="vToggle"><div class="vtop"><span id="vCnt"></span><button class="x" data-a="vClose" aria-label="Fechar" style="background:rgba(255,255,255,.18);color:#fff"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+<button id="vPrev" class="vnav l" data-a="vPrev" aria-label="Anterior">‹</button><button id="vNext" class="vnav r" data-a="vNext" aria-label="Próxima">›</button>
+<div class="vbot"><div id="vInfo"></div><div class="vacts" id="vActs"></div></div></div>
 <script>/* @preserve
  * Leaflet 1.9.4, a JS library for interactive maps. https://leafletjs.com
  * (c) 2010-2023 Vladimir Agafonkin, (c) 2010-2011 CloudMade
@@ -868,7 +883,7 @@ summary{font-weight:600;cursor:pointer}details p{color:var(--mut);font-size:14.5
 </script>
 <script>
 'use strict';
-const VERSION='3.1',BUILD='23/11/2026',DEV='Leonardo de Oliveira da Costa';
+const VERSION='3.2',BUILD='23/11/2026',DEV='Leonardo de Oliveira da Costa';
 const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const R=Math.PI/180;
@@ -917,13 +932,13 @@ const MI=(a,i,t,s,c='')=>`<button class="mi" data-a="${a}"><span class="ico ${c}
 const tog=(attr,t,s,on)=>`<label class="tog"><span>${t}${s?`<small>${s}</small>`:''}</span><input type="checkbox" ${attr} ${on?'checked':''}><i></i></label>`;
 
 /* ===== Banco de dados (IndexedDB) ===== */
-const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('trilhas',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('kv');d.createObjectStore('tracks',{keyPath:'id'});d.createObjectStore('wpts',{keyPath:'id'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
+const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('trilhas',2);r.onupgradeneeded=()=>{const d=r.result,has=n=>d.objectStoreNames.contains(n);if(!has('kv'))d.createObjectStore('kv');if(!has('tracks'))d.createObjectStore('tracks',{keyPath:'id'});if(!has('wpts'))d.createObjectStore('wpts',{keyPath:'id'});if(!has('photos'))d.createObjectStore('photos',{keyPath:'id'}).createIndex('trackId','trackId')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
 const run=(st,mode,f)=>open().then(d=>new Promise((res,rej)=>{const t=d.transaction(st,mode),q=f(t.objectStore(st));t.oncomplete=()=>res(q?q.result:undefined);t.onerror=t.onabort=()=>rej(t.error||new Error('Erro no banco'))}));
 return{get:(st,k)=>run(st,'readonly',s=>s.get(k)),all:st=>run(st,'readonly',s=>s.getAll()),put:(st,v,k)=>run(st,'readwrite',s=>k===undefined?s.put(v):s.put(v,k)),del:(st,k)=>run(st,'readwrite',s=>s.delete(k))}})();
 const save=(st,v,k)=>DB.put(st,v,k).catch(e=>{console.error(e);toast('Não foi possível salvar. O armazenamento pode estar cheio.')});
 
 /* ===== Estado ===== */
-const DEF={coord:'dd',acc:25,wake:true,offAlert:true,offDist:40,base:'topo',ov:[],view:null,showAll:true,showW:true};
+const DEF={coord:'dd',acc:25,wake:true,offAlert:true,offDist:40,base:'topo',ov:[],view:null,showAll:true,showW:true,phSave:true,phMap:true,phAddr:true,phOrig:false};
 let SET={...DEF},TR=[],WP=[],REG=[],REC=null,NAV=null,FOL=null,MEAS=null,OFF=null,fix=null,follow=false,SHOWN=null,CARD=null,TAB='map',PT=null,ED=null,SELC=null,RES=[],deferredInstall=null;
 const COLORS=['#d33a2c','#1f74d4','#2e8b57','#8e44ad','#ef6c00','#d81b60','#00897b','#222222'];
 const ICONS=['🚩','📍','⛺','🏠','🚗','💧','🌳','⛰️','🌊','📷','⚠️','❌','⭐','🔎','🐾','🍴'];
@@ -1044,7 +1059,7 @@ seg.push(pt);recLL[recLL.length-1].push([pt[0],pt[1]]);recLine.setLatLngs(recLL)
 function recStats(){if(!REC._s||REC._dirty){REC._s=stats(REC.segs);REC._dirty=false}const s={...REC._s};if(!REC.paused){const seg=REC.segs[REC.segs.length-1];const ref=seg.length?seg[seg.length-1][3]:REC.st;if(ref)s.dur+=Math.max(0,(Date.now()-ref)/1000)}return s}
 async function recStart(){askOri();REC={id:Date.now(),segs:[[]],paused:false,st:Date.now()};recLL=[[]];recLine.setLatLngs(recLL);await save('kv',recDump(),'rec');startGPS();keepAwake();vib(40);toast('Gravação iniciada. Mantenha o app aberto.');updRec();updTop()}
 function recPause(){REC.paused=!REC.paused;if(!REC.paused){REC.segs.push([]);recLL.push([]);REC.st=Date.now()}save('kv',recDump(),'rec');updRec();updTop();infoCard()}
-async function recDiscard(force){if(!force&&!confirm('Descartar esta gravação? Os pontos serão perdidos.'))return;REC=null;recLL=[];recLine.setLatLngs([]);await DB.del('kv','rec').catch(()=>{});closeCard();updRec();updTop();keepAwake();toast('Gravação descartada')}
+async function recDiscard(force){const np=photosOf(REC.id).length;if(!force&&!confirm('Descartar esta gravação? Os pontos serão perdidos.'+(np?`\nAs ${np} foto(s) tiradas nela também serão apagadas do app (as cópias na pasta Download continuam).`:'')))return;await deletePhotos(photosOf(REC.id).map(p=>p.id));REC=null;recLL=[];recLine.setLatLngs([]);await DB.del('kv','rec').catch(()=>{});closeCard();updRec();updTop();keepAwake();toast('Gravação descartada')}
 function recSaveCard(){const s=recStats();if(s.n<2){if(confirm('Ainda não há pontos suficientes gravados. Descartar a gravação?'))recDiscard(true);return}SELC=COLORS[0];
 card(`<div class="ch"><div class="tt"><h3>Salvar trilha</h3><small>${fd(s.d)} · ${ft(s.dur)} · ↑ ${Math.round(s.up)} m</small></div>${X}</div>
 <label class="fld">Nome da trilha<input id="tn" maxlength="80" value="Trilha ${esc(fdt(REC.id))}"></label>
@@ -1052,7 +1067,7 @@ card(`<div class="ch"><div class="tt"><h3>Salvar trilha</h3><small>${fd(s.d)} ·
 <div class="row mt"><button class="btn pri" data-a="recSave">${ic('save',20)} Salvar</button><button class="btn" data-a="close">Continuar gravando</button></div>`,{id:'save'})}
 async function recSave(){const name=($('#tn').value||'').trim()||'Trilha';const t={id:REC.id,name,color:SELC,type:'rec',segs:REC.segs.filter(s=>s.length),created:REC.id};
 await save('tracks',t);TR.unshift(t);REC=null;recLL=[];recLine.setLatLngs([]);await DB.del('kv','rec').catch(()=>{});updRec();updTop();keepAwake();vib(60);toast('Trilha salva');showTrack(t.id)}
-function updRec(){const b=$('#recBtn');b.classList.toggle('on',!!REC&&!REC.paused);b.classList.toggle('paused',!!REC&&REC.paused);b.setAttribute('aria-label',REC?'Gravação em andamento':'Gravar trilha')}
+function updRec(){$('#fCam').classList.toggle('hidden',!REC);drawPhotos();const b=$('#recBtn');b.classList.toggle('on',!!REC&&!REC.paused);b.classList.toggle('paused',!!REC&&REC.paused);b.setAttribute('aria-label',REC?'Gravação em andamento':'Gravar trilha')}
 
 /* ===== Painel superior ===== */
 function setCells(a,b){$('#l1').textContent=a[0];$('#v1').innerHTML=a[1];$('#l2').textContent=b[0];$('#v2').innerHTML=b[1]}
@@ -1064,7 +1079,7 @@ else setCells(['Elevação',fix&&fix.alt!=null?unit(Math.round(fix.alt)+' m'):(f
 setInterval(()=>{if(REC){updTop();if(CARD&&CARD.id==='info')live()}},1000);
 
 function infoCard(){card(`<div class="ch"><div class="tt"><h3>${REC?(REC.paused?'Gravação pausada':'Gravando trilha'):'Minha posição'}</h3><small>${REC?'Início '+fdt(REC.id):'Dados do GPS em tempo real'}</small></div>${X}</div><div id="live"></div>
-${REC?`<div class="row mt"><button class="btn" data-a="recPause">${ic(REC.paused?'play':'pause',20)} ${REC.paused?'Retomar':'Pausar'}</button><button class="btn pri" data-a="recFinish">${ic('stop',20)} Finalizar</button></div><button class="btn dang wide mt" data-a="recDiscard">Descartar gravação</button>`:''}`,{id:'info',live:liveInfo});liveInfo()}
+${REC?`<div class="row mt"><button class="btn" data-a="recPause">${ic(REC.paused?'play':'pause',20)} ${REC.paused?'Retomar':'Pausar'}</button><button class="btn pri" data-a="recFinish">${ic('stop',20)} Finalizar</button></div><button class="btn wide mt" data-a="photo" style="background:#ef6c00;color:#fff">${ic('cam',20)} Tirar foto da trilha${REC&&photosOf(REC.id).length?' ('+photosOf(REC.id).length+' até agora)':''}</button><button class="btn dang wide mt" data-a="recDiscard">Descartar gravação</button>`:''}`,{id:'info',live:liveInfo});liveInfo()}
 function liveInfo(){const el=$('#live');if(!el)return;let h='';if(REC){const s=recStats();h+=`<div class="grid">${cell('Distância',fd(s.d))}${cell('Tempo',ft(s.dur))}${cell('Vel. média km/h',s.mv?fv(s.d/s.mv):'–')}${cell('Em movimento',ft(s.mv))}${cell('Subida','↑ '+Math.round(s.up)+' m')}${cell('Descida','↓ '+Math.round(s.dn)+' m')}${cell('Alt. máx',s.maxE!=null?Math.round(s.maxE)+' m':'–')}${cell('Pontos',s.n)}</div>`}
 h+=`<div class="grid">${cell('Elevação',fix&&fix.alt!=null?Math.round(fix.alt)+' m':'–')}${cell('Velocidade km/h',fix&&fix.spd!=null?fv(fix.spd):'–')}${cell('Precisão',fix?'± '+Math.round(fix.acc)+' m':'–')}${cell('Direção',heading!=null?Math.round(heading)+'° '+card8(heading):'–')}</div>`;
 h+=fix?`<button class="coord" data-a="copy" data-v="${fix.lat},${fix.lon}">${fmtC(fix.lat,fix.lon)} ${ic('copy',16)}</button>`:`<p class="mut">${gpsErr||'Procurando sinal do GPS…'}</p>`;el.innerHTML=h}
@@ -1082,16 +1097,16 @@ $('#cmpI').innerHTML=(NAV?`<p class="mut" style="text-align:center">Seta azul: <
 /* ===== Trilhas no mapa ===== */
 function drawAll(){allLayer.clearLayers();if(!SET.showAll)return;for(const t of TR){if(t.id===SHOWN)continue;L.polyline(t.segs.map(s=>s.map(p=>[p[0],p[1]])),{color:t.color||'#d33a2c',weight:3.5,opacity:.75,renderer:cvR}).on('click',e=>{L.DomEvent.stopPropagation(e);if(MEAS)return measAdd(e.latlng);if(OFF)return;showTrack(t.id,false)}).addTo(allLayer)}}
 function drawShown(t){shownLayer.clearLayers();const ll=t.segs.map(s=>s.map(p=>[p[0],p[1]]));L.polyline(ll,{color:'#fff',weight:9,opacity:.9,interactive:false}).addTo(shownLayer);L.polyline(ll,{color:t.color||'#d33a2c',weight:5.5,interactive:false}).addTo(shownLayer);
-const f=t.segs.flat();if(f.length){const se=(p,c)=>L.marker([p[0],p[1]],{interactive:false,icon:L.divIcon({className:'',html:`<div class="se" style="background:${c}"></div>`,iconSize:[14,14],iconAnchor:[7,7]})}).addTo(shownLayer);se(f[0],'#2e9e44');se(f[f.length-1],'#d33a2c')}}
-function clearShown(){SHOWN=null;shownLayer.clearLayers();drawAll()}
+const f=t.segs.flat();if(f.length){const se=(p,c)=>L.marker([p[0],p[1]],{interactive:false,icon:L.divIcon({className:'',html:`<div class="se" style="background:${c}"></div>`,iconSize:[14,14],iconAnchor:[7,7]})}).addTo(shownLayer);se(f[0],'#2e9e44');se(f[f.length-1],'#d33a2c')}SHOWN=t.id;drawPhotos()}
+function clearShown(){SHOWN=null;shownLayer.clearLayers();drawAll();drawPhotos()}
 function showTrack(id,fit=true){const t=TR.find(x=>x.id==id);if(!t)return;goTab('map');SHOWN=t.id;drawShown(t);drawAll();
 if(fit){const b=L.latLngBounds(t.segs.flat().map(p=>[p[0],p[1]]));if(b.isValid())map.fitBounds(b,{paddingTopLeft:[30,110],paddingBottomRight:[30,Math.round(stage.offsetHeight*.55)],maxZoom:17})}trackCard(t)}
-function trackCard(t){const s=tstats(t),timed=t.type!=='route';
+function trackCard(t){const s=tstats(t),timed=t.type!=='route';let rv=()=>{};
 card(`<div class="ch"><span class="dot" style="background:${t.color}"></span><div class="tt"><h3>${esc(t.name)}</h3><small>${fdate(t.created||t.id)} · ${TYPE[t.type]||'Trilha'}</small></div>${X}</div>
 <div class="grid">${cell('Distância',fd(s.d))}${timed?cell('Tempo',ft(s.dur)):''}${cell('Subida','↑ '+Math.round(s.up)+' m')}${cell('Descida','↓ '+Math.round(s.dn)+' m')}${s.maxE!=null?cell('Alt. máx',Math.round(s.maxE)+' m')+cell('Alt. mín',Math.round(s.minE)+' m'):''}${timed?cell('Vel. média km/h',s.mv?fv(s.d/s.mv):'–')+cell('Em movimento',ft(s.mv)):''}</div>
 ${s.maxE!=null?`<div class="prof"><canvas id="pf"></canvas></div><div class="pfr" id="pfr">Arraste o dedo no gráfico para ver o ponto no mapa</div>`:`<button class="btn wide" data-a="trkEle" data-v="${t.id}">${ic('mtn',20)} Calcular perfil de elevação (internet)</button>`}
-<div class="acts">${A('trkFol',t.id,'nav','Seguir')}${A('trkRev',t.id,'swap','Seguir ao contrário')}${A('trkShare',t.id,'share','Compartilhar')}${A('trkGpx',t.id,'dl','Baixar GPX')}${A('trkEdit',t.id,'edit','Editar')}${A('trkDel',t.id,'trash','Apagar','dang')}</div>`,
-{id:'track',onClose:()=>{hoverM.remove();if(!FOL||FOL.id!==t.id)clearShown()}});if(s.maxE!=null)requestAnimationFrame(()=>profile($('#pf'),t))}
+${photoStrip(t.id)}<div class="acts">${A('trkFol',t.id,'nav','Seguir')}${A('trkRev',t.id,'swap','Seguir ao contrário')}${A('trkShare',t.id,'share','Compartilhar')}${A('trkGpx',t.id,'dl','Baixar GPX')}${A('trkEdit',t.id,'edit','Editar')}${A('trkDel',t.id,'trash','Apagar','dang')}</div>`,
+{id:'track',onClose:()=>{rv();hoverM.remove();if(!FOL||FOL.id!==t.id)clearShown()}});rv=fillThumbs(bcard);if(s.maxE!=null)requestAnimationFrame(()=>profile($('#pf'),t))}
 function profile(cv,t){if(!cv)return;const pts=t.segs.flat();const D=[0];for(let i=1;i<pts.length;i++)D.push(D[i-1]+hav(pts[i-1],pts[i]));
 let E=pts.map(p=>p[2]);if(t.type==='rec')E=E.map((e,i)=>{if(e==null)return null;let s=0,n=0;for(let k=Math.max(0,i-2);k<=Math.min(E.length-1,i+2);k++)if(E[k]!=null){s+=E[k];n++}return s/n});
 const idx=[];E.forEach((e,i)=>{if(e!=null)idx.push(i)});if(idx.length<2)return;
@@ -1210,6 +1225,100 @@ put(`<div class="wx-now"><span class="e">${W(c.weather_code)[0]}</span><div><b>$
 d.time.map((t,i)=>`<div class="wx-d"><span class="e">${W(d.weather_code[i])[0]}</span><span class="n">${i?new Date(t+'T12:00').toLocaleDateString('pt-BR',{weekday:'long'}):'Hoje'}<br><small class="mut">${W(d.weather_code[i])[1]} · chuva ${d.precipitation_probability_max[i]??'–'}%</small></span><span class="t">${Math.round(d.temperature_2m_min[i])}° / ${Math.round(d.temperature_2m_max[i])}°</span></div>`).join('')+'<p class="mut" style="font-size:12px">Fonte: Open-Meteo</p>')}
 catch{put('<p class="mut">Não foi possível obter a previsão agora.</p>')}}
 
+/* ===== Fotos da trilha (carimbo, EXIF, álbum) ===== */
+let PH=[],CAP=null,VW=null,vURL=null;const phURLs=[];
+const photoLayer=L.layerGroup().addTo(map);
+const p2=n=>String(n).padStart(2,'0');
+const stampName=t=>{const d=new Date(t);return `${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`};
+const trackOf=ph=>TR.find(t=>t.id===ph.trackId);
+const trackLabel=ph=>{const t=trackOf(ph);return t?t.name:(REC&&REC.id===ph.trackId?'Gravação em andamento':'Trilha de '+fdt(ph.trackId))};
+const photoFile=ph=>`Trilhas_${safeName(trackOf(ph)?trackOf(ph).name:'Trilha_'+stampName(ph.trackId))}_${stampName(ph.t)}_${String(ph.n).padStart(3,'0')}.jpg`;
+const photosOf=id=>PH.filter(p=>p.trackId===id).sort((a,b)=>a.t-b.t);
+function fmtLong(t){const d=new Date(t);return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('pt-BR')}
+function photoStart(){if(!REC)return toast('Comece a gravar uma trilha para tirar fotos');askOri();
+CAP={tap:Date.now(),fix:fix?{...fix}:null,head:heading,dist:recStats().d,trackId:REC.id};if(!fix)toast('Ainda sem sinal do GPS: a foto ficará sem coordenadas precisas',4000);$('#camIn').click()}
+function withTimeout(p,ms){return Promise.race([p,new Promise((_,j)=>setTimeout(()=>j(new Error('tempo')),ms))])}
+async function revGeo(lat,lon){if(!SET.phAddr||!navigator.onLine)return null;try{const c=new AbortController();setTimeout(()=>c.abort(),3000);const j=await(await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=pt-BR&lat=${lat}&lon=${lon}`,{signal:c.signal})).json();const a=j.address||{};
+return[[a.house_number,a.road||a.pedestrian||a.footway||a.path].filter(Boolean).join(' '),a.suburb||a.neighbourhood||a.hamlet||a.village,a.city||a.town||a.municipality||a.village,a.state].filter((v,i,arr)=>v&&arr.indexOf(v)===i)}catch{return null}}
+async function tileImg(d,x,y,z){const n=2**z;x=((x%n)+n)%n;if(y<0||y>=n)return null;try{const c=new AbortController();setTimeout(()=>c.abort(),3500);const r=await fetch(tUrl(d,[x,y,z]),{mode:'cors',signal:c.signal});if(!r.ok)return null;return await createImageBitmap(await r.blob())}catch{return null}}
+async function miniMap(lat,lon,segs){const z=16,S=384,d=BASES[SET.base].cors!==false?BASES[SET.base]:BASES.osm,W=256*2**z,px=l=>(l+180)/360*W,py=a=>{a=Math.max(-85,Math.min(85,a))*R;return(1-Math.log(Math.tan(a)+1/Math.cos(a))/Math.PI)/2*W};
+const cx=px(lon),cy=py(lat),x0=cx-S/2,y0=cy-S/2,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.fillStyle='#e8e4da';g.fillRect(0,0,S,S);
+const jobs=[];for(let tx=Math.floor(x0/256);tx<=Math.floor((x0+S)/256);tx++)for(let ty=Math.floor(y0/256);ty<=Math.floor((y0+S)/256);ty++)jobs.push(tileImg(d,tx,ty,z).then(b=>{if(b)g.drawImage(b,tx*256-x0,ty*256-y0)}));
+await withTimeout(Promise.all(jobs),5000).catch(()=>{});
+g.lineJoin=g.lineCap='round';for(const [w,col] of[[7,'#fff'],[4,'#d33a2c']]){g.strokeStyle=col;g.lineWidth=w;for(const s of segs){g.beginPath();s.forEach((p,i)=>{const X=px(p[1])-x0,Y=py(p[0])-y0;i?g.lineTo(X,Y):g.moveTo(X,Y)});g.stroke()}}
+const X=S/2,Y=S/2;g.fillStyle='#d33a2c';g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.moveTo(X,Y);g.bezierCurveTo(X-6,Y-14,X-16,Y-20,X-16,Y-32);g.arc(X,Y-32,16,Math.PI,0);g.bezierCurveTo(X+16,Y-20,X+6,Y-14,X,Y);g.fill();g.stroke();g.fillStyle='#8b1d14';g.beginPath();g.arc(X,Y-32,6,0,7);g.fill();
+g.font='bold 13px system-ui,sans-serif';g.fillStyle='rgba(255,255,255,.85)';g.fillRect(0,S-20,S,20);g.fillStyle='#333';g.fillText(d.a.split(',')[0],6,S-6);return c}
+function dms(v){const a=Math.abs(v);return a.toFixed(5).replace('.',',')}
+async function stampPhoto(file,m){const bmp=await createImageBitmap(file);const k=Math.min(1,2560/Math.max(bmp.width,bmp.height)),w=Math.round(bmp.width*k),h=Math.round(bmp.height*k);
+const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.drawImage(bmp,0,0,w,h);if(bmp.close)bmp.close();const orig=SET.phOrig?await new Promise(r=>c.toBlob(r,'image/jpeg',.9)):null;
+const base=Math.min(w,h),pad=Math.round(base*.025),mapS=SET.phMap?Math.round(base*.34):0;
+const L1=[fmtLong(m.t)];if(m.lat!=null){L1.push(`${m.lat<0?'-':''}${dms(m.lat)}${m.lat<0?'S':'N'}  ${m.lon<0?'-':''}${dms(m.lon)}${m.lon<0?'W':'E'}`);if(SET.coord!=='dd')L1.push(fmtC(m.lat,m.lon))}else L1.push('Sem sinal de GPS');
+(m.addr||[]).forEach(a=>L1.push(a));if(m.alt!=null)L1.push(`Altitude: ${m.alt.toFixed(1).replace('.',',')} m`);L1.push(`Velocidade: ${m.spd!=null?fv(m.spd):'0,0'} km/h`);
+if(m.head!=null)L1.push(`Direção: ${Math.round(m.head)}° ${card8(m.head)}`);if(m.acc!=null)L1.push(`Precisão GPS: ± ${Math.round(m.acc)} m`);L1.push(`Trilha: ${fd(m.dist)} percorridos`);L1.push(`Foto nº ${m.n} · Trilhas GPS`);
+let fs=Math.round(base*.036);const maxW=w-mapS-pad*3;g.font=`600 ${fs}px system-ui,Roboto,sans-serif`;const wid=Math.max(...L1.map(s=>g.measureText(s).width));if(wid>maxW){fs=Math.floor(fs*maxW/wid);g.font=`600 ${fs}px system-ui,Roboto,sans-serif`}
+const lh=Math.round(fs*1.22),blockH=lh*L1.length,gh=Math.max(blockH,mapS)+pad*3;const gr=g.createLinearGradient(0,h-gh,0,h);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.45)');g.fillStyle=gr;g.fillRect(0,h-gh,w,gh);
+g.textAlign='right';g.textBaseline='alphabetic';g.lineJoin='round';L1.forEach((s,i)=>{const y=h-pad-(L1.length-1-i)*lh;g.lineWidth=Math.max(2,fs*.14);g.strokeStyle='rgba(0,0,0,.65)';g.strokeText(s,w-pad,y);g.fillStyle='#fff';g.fillText(s,w-pad,y)});
+if(mapS&&m.lat!=null){const mm=await miniMap(m.lat,m.lon,m.segs);const x=pad,y=h-pad-mapS;g.save();g.beginPath();g.roundRect?g.roundRect(x,y,mapS,mapS,mapS*.04):g.rect(x,y,mapS,mapS);g.clip();g.drawImage(mm,x,y,mapS,mapS);g.restore();g.lineWidth=Math.max(2,base*.004);g.strokeStyle='rgba(255,255,255,.9)';g.strokeRect(x,y,mapS,mapS)}
+const jpg=await new Promise(r=>c.toBlob(r,'image/jpeg',.86));const t=document.createElement('canvas'),ts=Math.min(1,360/Math.max(w,h));t.width=Math.round(w*ts);t.height=Math.round(h*ts);t.getContext('2d').drawImage(c,0,0,t.width,t.height);const thumb=await new Promise(r=>t.toBlob(r,'image/jpeg',.75));
+return{blob:await addExif(jpg,m),thumb,orig:orig?await addExif(orig,m):null}}
+/* EXIF com GPS, data e direção, para a foto abrir no lugar certo em qualquer galeria */
+function exifBytes(m){const asc=s=>[...String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x20-\x7e]/g,'')].map(ch=>ch.charCodeAt(0)).concat(0);
+const d=new Date(m.t),loc=`${d.getFullYear()}:${p2(d.getMonth()+1)}:${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`,off=-d.getTimezoneOffset(),offs=`${off<0?'-':'+'}${p2(Math.floor(Math.abs(off)/60))}:${p2(Math.abs(off)%60)}`;
+const rat=(n,dn=1)=>[n,dn],dmsR=v=>{const a=Math.abs(v),D=Math.floor(a),Mi=Math.floor((a-D)*60),S=Math.round(((a-D)*60-Mi)*60*10000);return[rat(D),rat(Mi),rat(S,10000)]};
+const E=(tag,type,vals)=>({tag,type,vals});
+function ifd(entries,start){entries.sort((a,b)=>a.tag-b.tag);const sz={1:1,2:1,3:2,4:4,5:8},head=2+entries.length*12+4,out=[],data=[];const u16=v=>[(v>>8)&255,v&255],u32=v=>[(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255];out.push(...u16(entries.length));
+for(const e of entries){const cnt=e.type===5?e.vals.length:e.vals.length,bytes=[];for(const v of e.vals){if(e.type===1||e.type===2)bytes.push(v&255);else if(e.type===3)bytes.push(...u16(v));else if(e.type===4)bytes.push(...u32(v));else bytes.push(...u32(v[0]),...u32(v[1]))}
+out.push(...u16(e.tag),...u16(e.type),...u32(cnt));if(bytes.length<=4){out.push(...bytes,...Array(4-bytes.length).fill(0))}else{out.push(...u32(start+head+data.length));data.push(...bytes);if(data.length%2)data.push(0)}}out.push(0,0,0,0);return out.concat(data)}
+const gps=[E(0,1,[2,3,0,0])];if(m.lat!=null){gps.push(E(1,2,asc(m.lat<0?'S':'N')),E(2,5,dmsR(m.lat)),E(3,2,asc(m.lon<0?'W':'E')),E(4,5,dmsR(m.lon)));if(m.alt!=null)gps.push(E(5,1,[m.alt<0?1:0]),E(6,5,[rat(Math.round(Math.abs(m.alt)*10),10)]))}
+const u=new Date(m.t);gps.push(E(7,5,[rat(u.getUTCHours()),rat(u.getUTCMinutes()),rat(u.getUTCSeconds())]),E(0x1D,2,asc(`${u.getUTCFullYear()}:${p2(u.getUTCMonth()+1)}:${p2(u.getUTCDate())}`)));
+if(m.head!=null)gps.push(E(0x10,2,asc('M')),E(0x11,5,[rat(Math.round(m.head*100),100)]));if(m.acc!=null)gps.push(E(0x1F,5,[rat(Math.round(m.acc*10),10)]));
+const exif=[E(0x9003,2,asc(loc)),E(0x9004,2,asc(loc)),E(0x9011,2,asc(offs))];
+const i0=e=>[E(0x010E,2,asc(m.desc)),E(0x0131,2,asc('Trilhas GPS '+VERSION)),E(0x0132,2,asc(loc)),E(0x8769,4,[e[0]]),E(0x8825,4,[e[1]])];
+const len0=ifd(i0([0,0]),8).length,eo=8+len0,le=ifd(exif.slice(),eo).length,go=eo+le;
+const tiff=[0x4D,0x4D,0,42,0,0,0,8].concat(ifd(i0([eo,go]),8),ifd(exif,eo),ifd(gps,go));const app=[0x45,0x78,0x69,0x66,0,0].concat(tiff),L2=app.length+2;return new Uint8Array([0xFF,0xE1,(L2>>8)&255,L2&255].concat(app))}
+async function addExif(blob,m){try{const b=new Uint8Array(await blob.arrayBuffer());if(b[0]!==0xFF||b[1]!==0xD8)return blob;let i=2;if(b[2]===0xFF&&b[3]===0xE0)i=4+((b[4]<<8)|b[5]);return new Blob([b.subarray(0,i),exifBytes(m),b.subarray(i)],{type:'image/jpeg'})}catch{return blob}}
+async function photoProcess(file){const cap=CAP||{tap:Date.now(),fix:fix?{...fix}:null,head:heading,dist:REC?recStats().d:0,trackId:REC&&REC.id};CAP=null;if(!cap.trackId)return toast('A gravação não está ativa');
+toast('📷 Preparando foto…',15000);const f=cap.fix&&(!fix||Date.now()-cap.tap<20000)?cap.fix:(fix||cap.fix);const t=Math.abs((file.lastModified||0)-cap.tap)<15*60000?file.lastModified:Date.now();
+const n=photosOf(cap.trackId).length+1,segs=REC&&REC.id===cap.trackId?REC.segs:[];
+const m={t,n,lat:f?f.lat:null,lon:f?f.lon:null,alt:f?f.alt:null,acc:f?f.acc:null,spd:f?f.spd:null,head:cap.head,dist:cap.dist,segs,desc:`Trilhas GPS - foto ${n} - trilha iniciada ${fdt(cap.trackId)}`};
+m.addr=f?await revGeo(f.lat,f.lon):null;let r;try{r=await stampPhoto(file,m)}catch(e){console.error(e);return toast('Não foi possível processar a foto')}
+const ph={id:Date.now(),trackId:cap.trackId,n,t,lat:m.lat,lon:m.lon,alt:m.alt,acc:m.acc,spd:m.spd,head:m.head,dist:m.dist,addr:m.addr,blob:r.blob,thumb:r.thumb,orig:r.orig};
+await save('photos',ph);PH.push(ph);drawPhotos();vib(50);if(SET.phSave)download(r.blob,photoFile(ph),'image/jpeg');
+const u=URL.createObjectURL(r.thumb);card(`<div class="ihd"><img src="${u}" alt="" style="width:76px;height:76px;object-fit:cover"><div class="tt"><h3>Foto ${n} salva na trilha</h3><small>${SET.phSave?'Uma cópia foi salva na pasta Download do celular.':'Guardada no app. Você pode salvar no celular depois.'}</small></div>${X}</div>
+<div class="row mt"><button class="btn pri" data-a="photo">${ic('cam',20)} Tirar outra</button><button class="btn" data-a="phView" data-v="${ph.id}">Ver foto</button>${SET.phSave?'':`<button class="btn" data-a="phSave" data-v="${ph.id}">${ic('dl',20)} Salvar no celular</button>`}</div>`,{id:'phok',onClose:()=>URL.revokeObjectURL(u)});toast('✓ Foto '+n+' salva',2000)}
+function drawPhotos(){photoLayer.clearLayers();phURLs.splice(0).forEach(u=>URL.revokeObjectURL(u));const ids=[SHOWN,REC&&REC.id].filter(Boolean);
+for(const id of ids){const list=photosOf(id);list.forEach((p,i)=>{if(p.lat==null)return;const u=URL.createObjectURL(p.thumb||p.blob);phURLs.push(u);L.marker([p.lat,p.lon],{zIndexOffset:500,icon:L.divIcon({className:'',html:`<div class="phm"><img src="${u}" alt=""></div>`,iconSize:[42,42],iconAnchor:[21,21]})}).on('click',()=>{if(MEAS||OFF)return;openViewer(list,i)}).addTo(photoLayer)})}}
+function photoStrip(id){const list=photosOf(id);if(!list.length)return'';return `<div class="lbl">Fotos da trilha (${list.length})</div><div class="pstrip">${list.map((p,i)=>`<button data-a="phOpen" data-v="${id}:${i}"><img data-ph="${p.id}" alt="Foto ${p.n}"></button>`).join('')}</div>
+<div class="row" style="margin-top:8px"><button class="btn sm" data-a="phSaveAll" data-v="${id}">${ic('dl',18)} Salvar fotos no celular</button><button class="btn sm" data-a="trkZip" data-v="${id}">${ic('save',18)} Trilha + fotos (.zip)</button></div>`}
+function fillThumbs(root){const urls=[];$$('img[data-ph]',root).forEach(im=>{const p=PH.find(x=>x.id==im.dataset.ph);if(p){const u=URL.createObjectURL(p.thumb||p.blob);urls.push(u);im.src=u}});return()=>urls.forEach(u=>URL.revokeObjectURL(u))}
+/* Visualizador */
+function openViewer(list,i){if(!list.length)return;VW={list,i:Math.max(0,i)};vActs();$('#viewer').classList.remove('clean');$('#viewer').classList.remove('hidden');showViewer()}
+function showViewer(){const p=VW.list[VW.i];if(!p)return closeViewer();if(vURL)URL.revokeObjectURL(vURL);vURL=URL.createObjectURL(p.blob);$('#vImg').src=vURL;$('#vCnt').textContent=`Foto ${VW.i+1} de ${VW.list.length}`;
+$('#vInfo').innerHTML=`<b>${esc(trackLabel(p))}</b><br>${fmtLong(p.t)}<br>${p.lat!=null?fmtC(p.lat,p.lon)+(SET.coord!=='dd'?'<br>'+fmtC(p.lat,p.lon,'dd'):''):'Sem coordenadas'}${p.addr&&p.addr.length?'<br>'+esc(p.addr.join(', ')):''}<br>${p.alt!=null?'Altitude '+Math.round(p.alt)+' m · ':''}${fd(p.dist)} da trilha${p.head!=null?' · direção '+Math.round(p.head)+'° '+card8(p.head):''}`;
+$('#vPrev').classList.toggle('hidden',VW.i===0);$('#vNext').classList.toggle('hidden',VW.i>=VW.list.length-1)}
+function vActs(){$('#vActs').innerHTML=[['vShare','share','Enviar'],['vSave','dl','Salvar'],['vMap','map','No mapa'],['vInfoT','copy','Copiar'],['vDel','trash','Apagar']].map(([a,i,t])=>`<button data-a="${a}">${ic(i,20)}<span>${t}</span></button>`).join('')}
+function closeViewer(){$('#viewer').classList.add('hidden');if(vURL){URL.revokeObjectURL(vURL);vURL=null}VW=null}
+(()=>{let x0=null;const v=$('#viewer');v.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;x0=e.clientX});v.addEventListener('pointerup',e=>{if(x0==null||!VW)return;const dx=e.clientX-x0;x0=null;if(Math.abs(dx)>50){window._sw=Date.now();VW.i=Math.max(0,Math.min(VW.list.length-1,VW.i+(dx<0?1:-1)));showViewer()}})})();
+async function deletePhotos(ids){for(const id of ids)await DB.del('photos',id).catch(()=>{});PH=PH.filter(p=>!ids.includes(p.id));drawPhotos()}
+async function saveAllPhotos(id){const list=photosOf(id);if(!list.length)return;toast(`Salvando ${list.length} foto(s) na pasta Download…`,4000);for(const p of list){download(p.blob,photoFile(p),'image/jpeg');await new Promise(r=>setTimeout(r,450))}}
+/* ZIP simples (sem compressão) */
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
+async function makeZip(files){const enc=new TextEncoder(),parts=[],cd=[];let off=0;const d=new Date(),dt=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),dd=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+for(const f of files){const data=typeof f.data==='string'?enc.encode(f.data):new Uint8Array(await f.data.arrayBuffer()),nm=enc.encode(f.name),crc=crc32(data);
+const h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(10,dt,true);h.setUint16(12,dd,true);h.setUint32(14,crc,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,nm.length,true);parts.push(h.buffer,nm,data);
+const c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(12,dt,true);c.setUint16(14,dd,true);c.setUint32(16,crc,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,nm.length,true);c.setUint32(42,off,true);cd.push(c.buffer,nm);off+=30+nm.length+data.length}
+const cs=cd.reduce((s,b)=>s+b.byteLength,0),e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);return new Blob([...parts,...cd,e.buffer],{type:'application/zip'})}
+async function readZip(blob){const tail=new DataView(await blob.slice(Math.max(0,blob.size-65557)).arrayBuffer());let p=-1;for(let i=tail.byteLength-22;i>=0;i--)if(tail.getUint32(i,true)===0x06054b50){p=i;break}if(p<0)throw new Error('zip inválido');
+const n=tail.getUint16(p+10,true),cdOff=tail.getUint32(p+16,true),cdSz=tail.getUint32(p+12,true),cd=new DataView(await blob.slice(cdOff,cdOff+cdSz).arrayBuffer()),dec=new TextDecoder(),out={};let q=0;
+for(let k=0;k<n;k++){const meth=cd.getUint16(q+10,true),csz=cd.getUint32(q+20,true),nl=cd.getUint16(q+28,true),el=cd.getUint16(q+30,true),cl=cd.getUint16(q+32,true),lo=cd.getUint32(q+42,true),name=dec.decode(new Uint8Array(cd.buffer,q+46,nl));
+const lh=new DataView(await blob.slice(lo,lo+30).arrayBuffer()),ds=lo+30+lh.getUint16(26,true)+lh.getUint16(28,true);out[name]={meth,blob:blob.slice(ds,ds+csz)};q+=46+nl+el+cl}return out}
+async function trackZip(t){toast('Montando o pacote…',6000);const list=photosOf(t.id),files=[];const extra=list.filter(p=>p.lat!=null).map(p=>`<wpt lat="${p.lat}" lon="${p.lon}">${p.alt!=null?`<ele>${p.alt}</ele>`:''}<time>${new Date(p.t).toISOString()}</time><name>Foto ${p.n}</name>${p.addr?`<desc>${xe(p.addr.join(', '))}</desc>`:''}<link href="fotos/${photoFile(p)}"><text>Foto ${p.n}</text></link></wpt>`).join('\n');
+files.push({name:safeName(t.name)+'.gpx',data:gpx([t],[]).replace('<trk>',extra+'\n<trk>')});
+files.push({name:'fotos.csv',data:'﻿numero;arquivo;data_hora;latitude;longitude;altitude_m;precisao_m;direcao_graus;distancia_trilha_m;endereco\n'+list.map(p=>[p.n,photoFile(p),fmtLong(p.t),p.lat!=null?p.lat.toFixed(7):'',p.lon!=null?p.lon.toFixed(7):'',p.alt!=null?p.alt.toFixed(1):'',p.acc!=null?Math.round(p.acc):'',p.head!=null?Math.round(p.head):'',Math.round(p.dist||0),(p.addr||[]).join(', ')].join(';')).join('\n')});
+for(const p of list)files.push({name:'fotos/'+photoFile(p),data:p.blob});const z=await makeZip(files);shareOrDownload(z,safeName(t.name)+'_com_fotos.zip','application/zip')}
+async function shareOrDownload(blob,name,type){try{const f=new File([blob],name,{type});if(navigator.canShare&&navigator.canShare({files:[f]})&&confirm('Compartilhar o arquivo (WhatsApp, Drive, e-mail…)?\nToque em Cancelar para só baixar.')){await navigator.share({files:[f],title:name});return}}catch(e){if(e&&e.name==='AbortError')return}download(blob,name,type)}
+
 /* ===== Cartões de camadas, busca e adicionar ===== */
 function thumb(d){const c=map.getCenter(),z=11,n=2**z,x=Math.floor((c.lng+180)/360*n),la=c.lat*R,y=Math.floor((1-Math.log(Math.tan(la)+1/Math.cos(la))/Math.PI)/2*n);return tUrl(d,[x,y,z])}
 function layersCard(){card(`<div class="ch"><div class="tt"><h3>Camadas do mapa</h3><small>Mapas já vistos ficam guardados para uso offline</small></div>${X}</div>
@@ -1222,7 +1331,7 @@ const sr=$('#sr');if(!navigator.onLine){sr.innerHTML='<p class="mut">A busca de 
 try{const b=map.getBounds();const j=await(await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&accept-language=pt-BR&viewbox='+[b.getWest(),b.getNorth(),b.getEast(),b.getSouth()].map(v=>v.toFixed(4)).join(',')+'&q='+encodeURIComponent(q))).json();RES=j;
 sr.innerHTML=j.length?j.map((x,i)=>`<div class="item" data-a="res" data-v="${i}">${ic('pin',20)}<div class="it"><b>${esc(x.name||x.display_name.split(',')[0])}</b><small>${esc(x.display_name)}</small></div></div>`).join(''):'<p class="mut">Nada encontrado.</p>'}catch{sr.innerHTML='<p class="mut">Não foi possível buscar agora.</p>'}}
 function plusCard(){card(`<div class="ch"><div class="tt"><h3>O que você quer fazer?</h3></div>${X}</div><div class="menu">
-${REC?MI('top','stop','Ver gravação em andamento','Pausar, finalizar ou descartar','r'):MI('rec','rec','Gravar trilha','Registra seu caminho com o GPS','r')}
+${REC?MI('top','stop','Ver gravação em andamento','Pausar, finalizar ou descartar','r')+MI('photo','cam','Tirar foto da trilha','Com data, hora, coordenadas e mini mapa'):MI('rec','rec','Gravar trilha','Registra seu caminho com o GPS','r')}
 ${MI('wptMe','flag','Marcar ponto na minha posição',fix?'Precisão atual ± '+Math.round(fix.acc)+' m':'Aguardando sinal do GPS')}
 ${MI('wptCenter','target','Marcar ponto no centro do mapa','Ou segure o dedo em qualquer lugar do mapa')}
 ${MI('meas','ruler','Planejar rota / medir distância','Toque no mapa para traçar o caminho')}
@@ -1232,7 +1341,7 @@ ${MI('imp','up','Importar GPX ou KML','Trilhas e pontos de outros aplicativos')}
 
 /* ===== Páginas ===== */
 const PAGES={
-tracks(){const L2=TR.map(t=>{const s=tstats(t);return `<div class="item" data-a="trk" data-v="${t.id}" data-n="${esc(t.name.toLowerCase())}"><span class="sw" style="background:${t.color}"></span><div class="it"><b>${esc(t.name)}</b><small>${fdate(t.created||t.id)} · ${fd(s.d)} · ↑ ${Math.round(s.up)} m${t.type==='route'?' · rota planejada':' · '+ft(s.dur)}</small></div>${ic('chev',18)}</div>`}).join('');
+tracks(){const L2=TR.map(t=>{const s=tstats(t);return `<div class="item" data-a="trk" data-v="${t.id}" data-n="${esc(t.name.toLowerCase())}"><span class="sw" style="background:${t.color}"></span><div class="it"><b>${esc(t.name)}</b><small>${fdate(t.created||t.id)} · ${fd(s.d)} · ↑ ${Math.round(s.up)} m${t.type==='route'?' · rota planejada':' · '+ft(s.dur)}${photosOf(t.id).length?' · 📷 '+photosOf(t.id).length:''}</small></div>${ic('chev',18)}</div>`}).join('');
 $('#page').innerHTML=`<h2>Trilhas</h2><p class="sub">${TR.length} trilha(s) salva(s)</p><div class="row"><button class="btn pri" data-a="rec">${ic('rec',20)} ${REC?'Ver gravação':'Gravar'}</button><button class="btn" data-a="meas">${ic('ruler',20)} Planejar</button><button class="btn" data-a="imp">${ic('up',20)} Importar</button></div>
 ${TR.length>5?`<input class="filter mt" data-filter placeholder="Filtrar por nome…">`:''}
 <div class="sec">${TR.length?L2:`<div class="empty">${ic('route',44)}<p>Nenhuma trilha ainda.<br>Toque no botão vermelho no topo do mapa para gravar sua primeira caminhada.</p></div>`}</div>
@@ -1254,7 +1363,8 @@ $('#page').innerHTML=`<h2>Ajustes</h2><p class="sub">Trilhas GPS ${VERSION}</p>
 ${tog('data-set="wake"','Manter a tela ligada','Durante gravação, navegação e download',SET.wake)}
 ${tog('data-set="offAlert"','Alerta ao sair da trilha','Vibra quando você se afasta da trilha seguida',SET.offAlert)}
 ${sel('offDist','Distância para o alerta',[[25,'25 m'],[40,'40 m'],[60,'60 m'],[100,'100 m']])}</div>
-<div class="sec"><h4>Seus dados</h4><p class="mut" style="font-size:14px">Faça backup de vez em quando. Se o navegador apagar os dados do site, você recupera tudo pelo arquivo.</p>
+<div class="sec"><h4>Fotos da trilha</h4>${tog('data-set="phSave"','Salvar cópia no celular','Cada foto vai para a pasta Download e aparece na Galeria',SET.phSave)}${tog('data-set="phMap"','Mini mapa na foto','Mostra a trilha e o local no canto da foto',SET.phMap)}${tog('data-set="phAddr"','Endereço na foto','Rua e cidade; precisa de internet na hora da foto',SET.phAddr)}${tog('data-set="phOrig"','Guardar também a foto original','Sem carimbo; ocupa o dobro do espaço',SET.phOrig)}</div>
+<div class="sec"><h4>Seus dados</h4><p class="mut" style="font-size:14px">Faça backup de vez em quando. O arquivo .zip leva trilhas, pontos e fotos. Se o navegador apagar os dados do site, você recupera tudo por ele.</p>
 <div class="row" style="margin-bottom:10px"><button class="btn pri" data-a="backup">${ic('save',20)} Fazer backup</button><button class="btn" data-a="restore">${ic('up',20)} Restaurar</button></div><button class="btn wide" style="margin-bottom:10px" data-a="expAll">${ic('dl',20)} Exportar tudo em GPX</button></div>
 <div class="sec"><p class="mut" style="font-size:14px;margin:12px 0">Como usar, novidades, atualizações e informações do app estão na aba <b>Sobre</b>.</p></div>`},
 about(){const iOS=/iPhone|iPad|iPod/.test(navigator.userAgent),inst=isStandalone();const D=(t,b)=>`<details><summary>${t}</summary>${b}</details>`;const lc=localStorage.getItem('lastCheck');
@@ -1268,6 +1378,8 @@ $('#page').innerHTML=`<div class="about-hd"><img src="icon-192.png" alt="" width
 <div class="sec"><h4>Como usar</h4>
 ${D('📲 Instalar no celular',`<p>${iOS?'No iPhone, abra o endereço no <b>Safari</b>, toque em <b>Compartilhar</b> (quadrado com seta) e em <b>Adicionar à Tela de Início</b>.':'No Android, abra o endereço no <b>Chrome</b>, toque no menu <b>⋮</b> e em <b>Instalar app</b> (ou Adicionar à tela inicial). O ícone aparece junto com os outros aplicativos.'} Abra uma vez com internet para que ele seja guardado para uso offline.</p>`)}
 ${D('🔴 Gravar uma trilha',`<p>Toque no <b>botão vermelho</b> no canto superior esquerdo do mapa. O painel do topo passa a mostrar distância e tempo. Toque no painel para ver todos os dados, <b>pausar</b> ou <b>finalizar</b>. Ao finalizar, dê um nome e escolha a cor. A tela fica ligada durante a gravação; se o app fechar, a gravação é retomada ao abrir de novo.</p>`)}
+${D('📷 Fotos durante a trilha',`<p>Com a gravação ligada, toque no <b>botão laranja da câmera</b> (ou + → Tirar foto da trilha). Cada foto recebe um carimbo com <b>data e hora, coordenadas, endereço, altitude, velocidade, direção, distância percorrida</b> e um <b>mini mapa</b> com a trilha. Esses dados também vão dentro do arquivo (EXIF), então a foto aparece no lugar certo em qualquer galeria com mapa.</p><p>Depois de salvar a trilha, abra-a: as fotos aparecem em miniatura e como bolinhas no mapa. Toque para ver em tela cheia; arraste para o lado para passar de foto e toque na imagem para esconder os botões.</p>`)}
+${D('🖼️ Onde ficam as fotos (álbum)',`<p>As fotos ficam guardadas <b>dentro do app</b>, agrupadas por trilha. Com a opção “Salvar cópia no celular” (Ajustes), cada foto também vai para a pasta <b>Download</b>, com o nome da trilha no arquivo, e aparece na Galeria e no Google Fotos no álbum “Download”.</p><p>Um aplicativo web não consegue criar um álbum com nome próprio na galeria. Para montar um álbum por trilha no Google Fotos, selecione as fotos e toque em <b>Adicionar ao álbum</b>. Para enviar tudo de uma vez, use <b>Trilha + fotos (.zip)</b>: o pacote traz o GPX, as fotos e uma planilha com os dados de cada uma.</p>`)}
 ${D('🚩 Marcar pontos',`<p>Use o botão <b>+</b> → Marcar ponto na minha posição, ou <b>segure o dedo</b> em qualquer lugar do mapa. Cada ponto pode ter nome, ícone, cor, observação e <b>foto</b>. Os pontos ficam na aba Pontos.</p>`)}
 ${D('🧭 Bússola e seta de direção',`<p>A <b>seta laranja</b> é você e aponta para onde o topo do celular está virado. A bússola preta no canto mostra o norte; toque nela para abrir a bússola grande com os graus. Se apontar errado, mova o celular desenhando um <b>8</b> no ar, longe de metais e capas magnéticas.</p>`)}
 ${D('🥾 Seguir uma trilha',`<p>Abra uma trilha (aba Trilhas ou tocando nela no mapa) e escolha <b>Seguir</b> ou <b>Seguir ao contrário</b>. O topo mostra quanto falta e a distância até a trilha. O celular vibra se você se afastar (ajuste a distância do alerta em Ajustes).</p>`)}
@@ -1291,7 +1403,8 @@ ${D('⛰️ Altitude',`<p>A altitude vem do GPS do celular e pode variar alguns 
 <li><b>GitHub Pages</b> — hospedagem do aplicativo</li></ul></div>
 <div class="sec"><h4>Privacidade</h4><p class="mut" style="font-size:14.5px;margin:8px 0 12px">Não há conta, cadastro nem servidor próprio: trilhas, pontos e fotos ficam só no seu celular. Vão para a internet apenas os pedidos de mapa, o texto que você digita na busca e a coordenada aproximada quando você pede previsão do tempo ou elevação.</p></div>
 <div class="sec"><h4>Novidades</h4>
-${D('Versão 3.1 · 23/11/2026',`<p>Ícone novo, aba Sobre com manual de uso, aviso para instalar o app e atualização automática mais rápida.</p>`)}
+${D('Versão 3.2 · 23/11/2026',`<p>Fotos durante a trilha com carimbo de data, hora, coordenadas, endereço e mini mapa; dados GPS gravados no arquivo (EXIF); fotos no mapa e na trilha salva; visualizador em tela cheia; pacote .zip com GPX, fotos e planilha; backup em .zip com fotos.</p>`)}
+${D('Versão 3.1',`<p>Ícone novo, aba Sobre com manual de uso, aviso para instalar o app e atualização automática mais rápida.</p>`)}
 ${D('Versão 3.0',`<p>Tela redesenhada, seta de direção, bússola, seguir trilha com alerta, navegação até pontos, pontos com foto, coordenadas UTM, camadas novas, mapas offline por área, previsão do tempo e armazenamento maior.</p>`)}
 ${D('Versão 2.0',`<p>Medição de distância, rota planejada e backup.</p>`)}
 ${D('Versão 1.0',`<p>Primeira versão: gravação de trilhas, pontos, GPX e mapas offline.</p>`)}</div>
@@ -1320,13 +1433,19 @@ TR.sort((a,b)=>b.id-a.id);drawAll();drawWpts();if(nt||nw){toast(`Importado: ${nt
 
 /* ===== Backup ===== */
 const blob2url=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
-async function backup(){toast('Preparando backup…');const w=await Promise.all(WP.map(async x=>({...x,photo:x.photo?await blob2url(x.photo):null})));download(JSON.stringify({app:'trilhas-gps',v:3,date:new Date().toISOString(),tracks:TR,wpts:w,regions:REG,settings:{...SET,view:null}}),'trilhas-backup-'+new Date().toISOString().slice(0,10)+'.json','application/json')}
+async function backup(){toast('Preparando backup…',10000);const files=[],wp=[];for(const w of WP){const o={...w};if(w.photo){o.photo='pontos/'+w.id+'.jpg';files.push({name:o.photo,data:w.photo})}wp.push(o)}
+const ph=PH.map(p=>{const o={...p,blob:'fotos/'+p.id+'.jpg',thumb:p.thumb?'fotos/'+p.id+'_mini.jpg':null,orig:p.orig?'fotos/'+p.id+'_original.jpg':null};files.push({name:o.blob,data:p.blob});if(p.thumb)files.push({name:o.thumb,data:p.thumb});if(p.orig)files.push({name:o.orig,data:p.orig});return o});
+files.unshift({name:'backup.json',data:JSON.stringify({app:'trilhas-gps',v:4,date:new Date().toISOString(),tracks:TR,wpts:wp,photos:ph,regions:REG,settings:{...SET,view:null}})});
+download(await makeZip(files),'trilhas-backup-'+new Date().toISOString().slice(0,10)+'.zip','application/zip');toast('Backup pronto: confira a pasta Download')}
 function normTrack(o){const t={...o};if(t.pts&&!t.segs)t.segs=[t.pts];delete t.pts;t.color=t.color||COLORS[0];t.created=t.created||t.id;if(!t.type)t.type=t.segs.flat().every(p=>p[2]==null)&&t.segs.flat().every((p,i,a)=>!i||p[3]-a[i-1][3]===1000)?'route':'rec';return t}
-async function restore(file){try{const d=JSON.parse(await file.text());const tr=(d.tracks||[]).map(normTrack),wp=(d.w||d.wpts||[]);if(!tr.length&&!wp.length)throw 0;
-if(!confirm(`Restaurar ${tr.length} trilha(s) e ${wp.length} ponto(s)? Itens com o mesmo identificador serão substituídos.`))return;
-for(const t of tr){if(!t.segs||!t.segs.length)continue;await save('tracks',t)}for(const w of wp){const o={icon:'🚩',color:COLORS[0],note:'',...w};if(typeof o.photo==='string'&&o.photo.startsWith('data:'))o.photo=await(await fetch(o.photo)).blob();else o.photo=null;await save('wpts',o)}
+async function restore(file){try{let d,Z=null;const hd=new Uint8Array(await file.slice(0,2).arrayBuffer());if(hd[0]===0x50&&hd[1]===0x4B){Z=await readZip(file);if(!Z['backup.json'])throw 0;if(Object.values(Z).some(e=>e.meth!==0)){toast('Este .zip foi recompactado por outro programa. Use o arquivo original do backup.',6000);return}d=JSON.parse(await Z['backup.json'].blob.text())}else d=JSON.parse(await file.text());
+const getB=async k=>{if(!k)return null;if(typeof k==='string'&&k.startsWith('data:'))return await(await fetch(k)).blob();if(Z&&Z[k])return new Blob([await Z[k].blob.arrayBuffer()],{type:'image/jpeg'});return null};
+const tr=(d.tracks||[]).map(normTrack),wp=(d.w||d.wpts||[]),ph=d.photos||[];if(!tr.length&&!wp.length&&!ph.length)throw 0;
+if(!confirm(`Restaurar ${tr.length} trilha(s), ${wp.length} ponto(s) e ${ph.length} foto(s)? Itens com o mesmo identificador serão substituídos.`))return;toast('Restaurando…',10000);
+for(const t of tr){if(!t.segs||!t.segs.length)continue;await save('tracks',t)}for(const w of wp){const o={icon:'🚩',color:COLORS[0],note:'',...w};o.photo=await getB(o.photo);await save('wpts',o)}
+for(const p of ph){const o={...p,blob:await getB(p.blob),thumb:await getB(p.thumb),orig:await getB(p.orig)};if(o.blob)await save('photos',o)}
 if(Array.isArray(d.regions)&&d.regions.length){const ids=new Set(REG.map(r=>r.id));REG=REG.concat(d.regions.filter(r=>!ids.has(r.id)));await save('kv',REG,'regions')}
-await loadData();drawAll();drawWpts();refresh();toast('Backup restaurado')}catch{toast('Arquivo de backup inválido',4000)}}
+await loadData();drawAll();drawWpts();drawPhotos();refresh();toast('Backup restaurado')}catch{toast('Arquivo de backup inválido',4000)}}
 
 /* ===== Tela ligada ===== */
 let wl=null;async function keepAwake(force){const need=SET.wake&&(REC||NAV||FOL||force||(OFF&&OFF.busy));if(!('wakeLock' in navigator))return;if(!need){if(wl){wl.release().catch(()=>{});wl=null}return}if(wl||document.visibilityState!=='visible')return;try{wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}catch{}}
@@ -1340,7 +1459,16 @@ map.on('dragstart',()=>{if(follow){follow=false;updFollow()}});
 /* ===== Ações (cliques) ===== */
 const trk=v=>TR.find(t=>t.id==v),wpt=v=>WP.find(w=>w.id==v);
 const ACT={
-tab:v=>goTab(v),rec:()=>{goTab('map');REC?infoCard():recStart()},top:()=>infoCard(),close:()=>closeCard(),
+tab:v=>goTab(v),photo:()=>{closeCard();photoStart()},
+phView:v=>{const p=PH.find(x=>x.id==v);if(!p)return;const l=photosOf(p.trackId);openViewer(l,l.indexOf(p))},
+phSave:v=>{const p=PH.find(x=>x.id==v);download(p.blob,photoFile(p),'image/jpeg');toast('Salva na pasta Download')},
+phOpen:v=>{const[id,i]=v.split(':').map(Number);openViewer(photosOf(id),i)},phSaveAll:v=>saveAllPhotos(+v),trkZip:v=>trackZip(trk(v)),
+vClose:()=>closeViewer(),vPrev:()=>{if(VW.i>0){VW.i--;showViewer()}},vNext:()=>{if(VW.i<VW.list.length-1){VW.i++;showViewer()}},vToggle:()=>{if(Date.now()-(window._sw||0)>400)$('#viewer').classList.toggle('clean')},
+vInfoT:async()=>{const p=VW.list[VW.i];const t=`Foto ${p.n} - ${trackLabel(p)}\n${fmtLong(p.t)}\n${p.lat!=null?fmtC(p.lat,p.lon,'dd')+(SET.coord!=='dd'?'\n'+fmtC(p.lat,p.lon):''):'sem coordenadas'}${p.alt!=null?'\nAltitude '+p.alt.toFixed(1)+' m':''}${p.addr?'\n'+p.addr.join(', '):''}`;try{await navigator.clipboard.writeText(t);toast('Dados da foto copiados')}catch{toast(t,6000)}},
+vShare:async()=>{const p=VW.list[VW.i],f=new File([p.blob],photoFile(p),{type:'image/jpeg'});try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Foto '+p.n});return}}catch(e){if(e&&e.name==='AbortError')return}download(p.blob,photoFile(p),'image/jpeg')},
+vSave:()=>{const p=VW.list[VW.i];download(p.blob,photoFile(p),'image/jpeg');if(p.orig)setTimeout(()=>download(p.orig,photoFile(p).replace('.jpg','_original.jpg'),'image/jpeg'),500);toast('Salva na pasta Download do celular')},
+vMap:()=>{const p=VW.list[VW.i];closeViewer();if(p.lat==null)return toast('Esta foto está sem coordenadas');goTab('map');if(SHOWN!==p.trackId&&trackOf(p))showTrack(p.trackId,false);map.setView([p.lat,p.lon],Math.max(map.getZoom(),17))},
+vDel:async()=>{const p=VW.list[VW.i];if(!confirm(`Apagar a foto ${p.n}? A cópia na pasta Download do celular não é apagada.`))return;await deletePhotos([p.id]);VW.list.splice(VW.i,1);if(CARD&&CARD.id==='track'&&trk(p.trackId))trackCard(trk(p.trackId));if(!VW.list.length)return closeViewer();VW.i=Math.min(VW.i,VW.list.length-1);showViewer()},rec:()=>{goTab('map');REC?infoCard():recStart()},top:()=>infoCard(),close:()=>closeCard(),
 compass:()=>{askOri();startOri();compassCard()},follow:toggleFollow,layers:()=>layersCard(),search:()=>searchCard(),plus:()=>plusCard(),
 recPause,recFinish:recSaveCard,recDiscard:()=>recDiscard(),recSave,
 pickC:(v,b)=>{SELC=v;$$('.cols button',bcard).forEach(x=>x.classList.toggle('on',x===b))},
@@ -1350,7 +1478,7 @@ trkGpx:v=>{const t=trk(v);download(gpx([t],[]),safeName(t.name)+'.gpx','applicat
 trkShare:v=>{const t=trk(v);shareFile(gpx([t],[]),safeName(t.name)+'.gpx','application/gpx+xml')},
 trkEdit:v=>trackEditCard(trk(v)),
 trkSaveEd:async v=>{const t=trk(v);t.name=($('#tn').value||'').trim()||t.name;t.color=SELC;await save('tracks',t);drawShown(t);drawAll();trackCard(t)},
-trkDel:async v=>{const t=trk(v);if(!confirm(`Apagar a trilha "${t.name}"? Isso não pode ser desfeito.`))return;await DB.del('tracks',t.id);TR=TR.filter(x=>x!==t);if(FOL&&FOL.id===t.id)stopFol(true);closeCard();clearShown();toast('Trilha apagada')},
+trkDel:async v=>{const t=trk(v),np=photosOf(t.id).length;if(!confirm(`Apagar a trilha "${t.name}"${np?` e suas ${np} foto(s)`:''}? Isso não pode ser desfeito.${np?'\n(As cópias na pasta Download do celular continuam.)':''}`))return;await deletePhotos(photosOf(t.id).map(p=>p.id));await DB.del('tracks',t.id);TR=TR.filter(x=>x!==t);if(FOL&&FOL.id===t.id)stopFol(true);closeCard();clearShown();toast('Trilha apagada')},
 trkEle:async v=>{const t=trk(v);try{await addElevation(t);trackCard(t)}catch{toast('Não foi possível obter a elevação agora')}},
 folStop:()=>stopFol(),navStop:()=>stopNav(),
 wpt:v=>wptCard(+v),wptEdit:v=>wptEditCard(wpt(v),false),
@@ -1390,6 +1518,7 @@ if(el.dataset.set){let v=el.type==='checkbox'?el.checked:el.value;if(/^\d+$/.tes
 if(el.dataset.ov){setOv(el.dataset.ov,el.checked);saveSet();return}
 if(el.id==='offZ'){OFF.z1=+el.value;updOffEst();return}
 if(el.id==='fileIn'){if(el.files.length)await importFiles([...el.files]);el.value='';return}
+if(el.id==='camIn'){const f=el.files[0];el.value='';if(f)await photoProcess(f);else CAP=null;return}
 if(el.id==='restoreIn'){if(el.files[0])await restore(el.files[0]);el.value='';return}
 if(el.id==='photoIn'){const f=el.files[0];el.value='';if(!f||!ED)return;try{ED.photo=await compress(f);edPhoto()}catch{toast('Não foi possível carregar a foto')}}});
 
@@ -1428,8 +1557,8 @@ addEventListener('pointerdown',()=>askOri(),{once:true});
 async function migrate(){try{const old=localStorage.getItem('tracks'),w=localStorage.getItem('w'),r=localStorage.getItem('rec');if(!old&&!w&&!r)return;
 for(const t of JSON.parse(old||'[]'))await DB.put('tracks',normTrack(t));for(const x of JSON.parse(w||'[]'))await DB.put('wpts',{icon:'🚩',color:COLORS[0],note:'',photo:null,...x,id:Math.round(x.id)});
 const rc=JSON.parse(r||'null');if(rc&&rc.pts&&rc.pts.length)await DB.put('kv',{id:rc.id,segs:[rc.pts],paused:false,st:Date.now()},'rec');['tracks','w','rec'].forEach(k=>localStorage.removeItem(k))}catch(e){console.warn('migração',e)}}
-async function loadData(){TR=(await DB.all('tracks')).sort((a,b)=>b.id-a.id);WP=await DB.all('wpts');REG=(await DB.get('kv','regions'))||[]}
-(async()=>{$('#fSearch').innerHTML=ic('search',24);$('#fLayers').innerHTML=ic('layers',24);$('#fPlus').innerHTML=ic('plus',30);
+async function loadData(){TR=(await DB.all('tracks')).sort((a,b)=>b.id-a.id);WP=await DB.all('wpts');REG=(await DB.get('kv','regions'))||[];PH=await DB.all('photos')}
+(async()=>{$('#fSearch').innerHTML=ic('search',24);$('#fLayers').innerHTML=ic('layers',24);$('#fPlus').innerHTML=ic('plus',30);$('#fCam').innerHTML=ic('cam',26);
 [['nMap','map'],['nTr','route'],['nWp','pin'],['nOff','dl'],['nSet','sliders'],['nAb','info']].forEach(([id,n])=>$('#'+id).outerHTML=ic(n,24));updFollow();
 try{await migrate();SET={...DEF,...((await DB.get('kv','set'))||{})};await loadData();REC=(await DB.get('kv','rec'))||null}catch(e){toast('Erro ao abrir os dados: '+e.message,6000)}
 setBase(SET.base);(SET.ov||[]).forEach(k=>OVERS[k]&&setOv(k,true));if(SET.view)map.setView(SET.view.c,SET.view.z);else follow=true;updFollow();
