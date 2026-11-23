@@ -24,6 +24,8 @@ button.p{background:#2e7d32;color:#fff}button.r{background:#c62828;color:#fff}
 <button class="fab" style="top:64px" id="loc">📍</button>
 <button class="fab" style="top:116px" id="menu">☰</button>
 <button class="fab" style="top:168px" id="wpb">🚩</button>
+<button class="fab" style="top:220px" id="msr">📏</button>
+<div id="mw" style="display:none;position:absolute;left:10px;top:10px;z-index:1000;background:#fff;border-radius:10px;padding:8px;box-shadow:0 1px 5px #0006;align-items:center;gap:6px"><b id="md">0 m</b><button onclick="mUndo()" style="flex:none;padding:8px">↶</button><button onclick="mSave()" style="flex:none;padding:8px">Salvar</button><button onclick="mOff()" style="flex:none;padding:8px">✕</button></div>
 <div id="pfw"><span id="pfi"></span><b onclick="this.parentNode.style.display='none'">×</b><canvas id="pf"></canvas></div>
 <div id="dr"></div>
 <div id="bar"><div class="st"><div><b id="sD">0 m</b><span>Distância</span></div><div><b id="sT">0:00</b><span>Tempo</span></div><div><b id="sV">0.0</b><span>km/h médio</span></div><div><b id="sA">–</b><span>Altitude</span></div></div>
@@ -93,12 +95,25 @@ if(L.length>3000)return alert(L.length+' tiles: área grande demais. Aproxime o 
 let n=0;const st=$('#dls');for(let i=0;i<L.length;i+=6){await Promise.all(L.slice(i,i+6).map(t=>fetch(turl(t),{mode:'no-cors'}).catch(()=>{})));n=Math.min(i+6,L.length);st.textContent=`Baixando ${n}/${L.length}`}st.textContent='Concluído: '+L.length+' tiles salvos.'}
 async function clr(){if(confirm('Apagar todos os mapas offline?')){await caches.delete('tiles');alert('Mapas offline apagados.')}}
 let tab='t';
-function render(){const T=S.get('tracks',[]);let h=`<div class=tabs>${[['t','Trilhas'],['w','Pontos'],['o','Offline']].map(([k,n])=>`<button class="${tab==k?'p':''}" onclick="tab='${k}';render()">${n}</button>`).join('')}<button onclick="$('#dr').classList.remove('o')" style="flex:.4">✕</button></div>`;
+function render(){const T=S.get('tracks',[]);let h=`<div class=tabs>${[['t','Trilhas'],['w','Pontos'],['o','Offline'],['m','Mais']].map(([k,n])=>`<button class="${tab==k?'p':''}" onclick="tab='${k}';render()">${n}</button>`).join('')}<button onclick="$('#dr').classList.remove('o')" style="flex:.4">✕</button></div>`;
 if(tab=='t')h+=`<label class=imp>⬆ Importar GPX<input type=file accept=".gpx,.xml" hidden onchange="imp(this.files[0])"></label>`+(T.length?T.map(t=>{const s=stats(t.pts);return`<div class=it><b>${esc(t.name)}</b><small>${new Date(t.id).toLocaleDateString()} · ${fd(s.d)} · ↑${Math.round(s.up)} m ↓${Math.round(s.dn)} m · ${ft(s.el)}</small><div><button onclick="view(${t.id})">Ver</button><button onclick="exp(${t.id})">GPX</button><button onclick="delT(${t.id})">Apagar</button></div></div>`}).join(''):'<p>Nenhuma trilha gravada ainda.</p>');
 if(tab=='w')h+=(W.length?W.map(w=>`<div class=it><b>${esc(w.name)}</b><small>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}</small><div><button onclick="map.setView([${w.lat},${w.lon}],17);$('#dr').classList.remove('o')">Ir</button><button onclick="delW(${w.id})">Apagar</button></div></div>`).join(''):'<p>Use 🚩 para marcar sua posição, ou segure o dedo no mapa para marcar um ponto.</p>');
 if(tab=='o'){const[z0,z1]=zr(),n=tiles(map.getBounds(),z0,z1).length;h+=`<p>Salva a área visível da <b>camada atual</b> para uso sem internet. Aproxime o mapa da região da trilha antes de baixar.</p><label>Zoom máximo: <select id=zm onchange="render()">${[14,15,16,17,18].map(z=>`<option ${z==z1?'selected':''}>${z}</option>`).join('')}</select></label><p>Estimativa: ${n} tiles (zoom ${z0}–${z1}).</p><button class=p onclick="dl()" style="width:100%">⬇ Baixar área visível</button><p id=dls></p><button onclick="clr()" style="width:100%">Apagar mapas offline</button>`}
+if(tab=='m')h+=`<button class=p onclick="bk()" style="width:100%;margin-bottom:8px">💾 Salvar backup (tudo)</button><label class=imp>⬆ Restaurar backup<input type=file accept=".json" hidden onchange="rs(this.files[0])"></label><button onclick="inst()" style="width:100%;margin-top:8px">📲 Instalar app</button><p style="color:#666;font-size:13px">Faça backup de vez em quando: se o navegador limpar os dados do site, as trilhas se perdem. Versão 2.</p>`;
 $('#dr').innerHTML=h}
 $('#menu').onclick=()=>{render();$('#dr').classList.toggle('o')};
+let M=false,mp=[],dp;const ml=L.polyline([],{color:'#ff6f00',weight:4,dashArray:'8 8'}).addTo(map),mm=L.layerGroup().addTo(map);
+function mDraw(){ml.setLatLngs(mp);mm.clearLayers();mp.forEach(p=>L.circleMarker(p,{radius:4,color:'#ff6f00'}).addTo(mm));let d=0;for(let i=1;i<mp.length;i++)d+=hav(mp[i-1],mp[i]);$('#md').textContent=fd(d)}
+function mOff(){M=false;mp=[];mDraw();$('#mw').style.display='none';$('#msr').style.background='#fff'}
+function mUndo(){mp.pop();mDraw()}
+function mSave(){if(mp.length<2)return alert('Toque no mapa para marcar pelo menos 2 pontos.');const n=prompt('Nome da rota planejada:','Rota '+new Date().toLocaleDateString());if(n===null)return;const T=S.get('tracks',[]),t0=Date.now();T.unshift({id:t0,name:n||'Rota',pts:mp.map((p,i)=>[p[0],p[1],null,t0+i*1000])});S.set('tracks',T);mOff();render()}
+$('#msr').onclick=()=>{if(M)return mOff();M=true;$('#mw').style.display='flex';$('#msr').style.background='#ffe0b2'};
+map.on('click',e=>{if(M){mp.push([e.latlng.lat,e.latlng.lng]);mDraw()}});
+function bk(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({tracks:S.get('tracks',[]),w:W})],{type:'application/json'}));a.download='trilhas-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click()}
+async function rs(f){if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.tracks))throw 0;if(!confirm('Substituir os dados atuais pelo backup?'))return;S.set('tracks',d.tracks);W=d.w||[];S.set('w',W);drawW();render()}catch{alert('Arquivo de backup inválido.')}}
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e});
+function inst(){if(dp)dp.prompt();else alert('No Chrome: menu ⋮ → Instalar app (ou Adicionar à tela inicial).')}
+navigator.storage&&navigator.storage.persist&&navigator.storage.persist();
 drawW();if(rec){live.setLatLngs(rec.pts.map(p=>[p[0],p[1]]));ensureWatch();lock();upd()}ui();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
 </script></body></html>

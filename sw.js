@@ -1,4 +1,4 @@
-const V='trilhas-v1',L='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+const V='trilhas-v2',L='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
 const SHELL=['./','index.html','manifest.json','icon.svg',L+'leaflet.css',L+'leaflet.js',L+'images/layers.png',L+'images/layers-2x.png'];
 const isTile=h=>/tile\.openstreetmap\.org|opentopomap\.org|arcgisonline\.com/.test(h);
 const key=u=>u.replace(/^https:\/\/[abc]\.tile\./,'https://a.tile.');
